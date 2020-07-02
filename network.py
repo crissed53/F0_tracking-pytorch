@@ -42,7 +42,13 @@ class SalomonF0Tracker(nn.Module):
             # zero padding is to be applied to preserve input/output dimension,
             # filter size of 69x3 is used instead
             nn.Conv2d(64, 8, (69, 3), padding=(34, 1)),
-            nn.BatchNorm2d(8))
+            nn.BatchNorm2d(8),
+            nn.ReLU(True),
+
+            # Final downsampling layer, logistic regression on each bin of
+            # the latest activation
+            nn.Conv2d(8, 1, 1)
+        )
 
         self.init_layers()
 
