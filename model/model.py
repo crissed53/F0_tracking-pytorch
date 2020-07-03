@@ -15,10 +15,10 @@ class SalomonF0Tracker(nn.Module):
 
     def __init__(self):
         super().__init__()
-        # Input size: 6 x 360 x 50 (h, f, t)
+        # Input size: 4 x 360 x 50 (h, f, t)
         self.conv_net = nn.Sequential(
-            # Layer 1, 6 -> 128 filters, 5x5 filter size
-            nn.Conv2d(6, 128, 5, padding=2),
+            # Layer 1, 4 -> 128 filters, 5x5 filter size
+            nn.Conv2d(4, 128, 5, padding=2),
             nn.BatchNorm2d(128),
             nn.ReLU(True),
 
@@ -65,7 +65,7 @@ class SalomonF0Tracker(nn.Module):
 
 if __name__ == '__main__':
     net = SalomonF0Tracker()
-    _input = torch.randn(64, 6, 360, 50)
+    _input = torch.randn(64, 4, 360, 50)
     _output = net(_input)
     print(f'input shape: {_input.shape}')
     print(f'output shape: {_output.shape}')

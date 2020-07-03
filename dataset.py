@@ -11,9 +11,10 @@ class F0TrackingDataset(Dataset):
     FEATURE_LEN = 50
 
     def __init__(self, root: str = './dataset/features', feature_hop: int = 50,
-                 len_song: int = None):
+                 len_song: int = None, transform: object = None):
         self.root = root
         self.feature_hop = feature_hop
+        self.transform = transform
 
         self.metadata = self._load_metadata()
         self.cqt_config = self._load_cqt_config()
@@ -52,7 +53,6 @@ class F0TrackingDataset(Dataset):
             if song_id + 1 == len_song:
                 break
 
-
         return by_song_id
 
     def _calc_num_features(self, num_frames: int):
@@ -77,7 +77,13 @@ class F0TrackingDataset(Dataset):
         return by_idx
 
     def __getitem__(self, idx):
-        return self.by_idx[idx]
+        if not self.transform:
+            return self.by_idx[idx]
+        else:
+            return self.transform(self.by_idx[idx])
+
+    def __len__(self):
+        return len(self.by_idx)
 
 
 class ToTensor(object):
@@ -85,8 +91,9 @@ class ToTensor(object):
         hcqt = sample['hcqt']
         f0 = sample['f0']
 
-        return {'hcqt': torch.from_numpy(hcqt[np.newaxis, ...]),
-                'f0': torch.from_numpy(f0[np.newaxis, ...])}
+        return {'hcqt': torch.from_numpy(hcqt).to(dtype=torch.double),
+                # add harmonic channel for f0
+                'f0': torch.from_numpy(f0[np.newaxis, ...]).to(dtype=torch.double)}
 
 
 if __name__ == '__main__':
