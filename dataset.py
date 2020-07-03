@@ -4,6 +4,7 @@ import os
 from utils.feature_utils import CQTconfig
 from collections import defaultdict
 import numpy as np
+import torch
 
 
 class F0TrackingDataset(Dataset):
@@ -77,6 +78,15 @@ class F0TrackingDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.by_idx[idx]
+
+
+class ToTensor(object):
+    def __call__(self, sample):
+        hcqt = sample['hcqt']
+        f0 = sample['f0']
+
+        return {'hcqt': torch.from_numpy(hcqt[np.newaxis, ...]),
+                'f0': torch.from_numpy(f0[np.newaxis, ...])}
 
 
 if __name__ == '__main__':
