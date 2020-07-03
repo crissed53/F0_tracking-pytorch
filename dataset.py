@@ -5,15 +5,17 @@ from utils.feature_utils import CQTconfig
 from collections import defaultdict
 import numpy as np
 import torch
+import tqdm
 
 
 class F0TrackingDataset(Dataset):
     FEATURE_LEN = 50
 
     def __init__(self, root: str = './dataset/features', feature_hop: int = 50,
-                 len_song: int = None):
+                 len_song: int = -1, transform: object = None):
         self.root = root
         self.feature_hop = feature_hop
+        self.transform = transform
 
         self.metadata = self._load_metadata()
         self.cqt_config = self._load_cqt_config()
@@ -36,6 +38,8 @@ class F0TrackingDataset(Dataset):
 
     def _load_dataset(self, len_song: int = -1):
         by_song_id = defaultdict(dict)
+        prog_bar = tqdm.tqdm(desc='loading dataset', total=len(self.dataset_meta),
+                             position=0)
         for song_id, (filename, save_meta) in enumerate(self.dataset_meta.items()):
             self.id_to_filename_map[song_id] = filename
 
@@ -49,9 +53,9 @@ class F0TrackingDataset(Dataset):
 
             assert hcqt.shape[2] == f0.shape[1]
 
+            prog_bar.update()
             if song_id + 1 == len_song:
                 break
-
 
         return by_song_id
 
@@ -77,7 +81,13 @@ class F0TrackingDataset(Dataset):
         return by_idx
 
     def __getitem__(self, idx):
-        return self.by_idx[idx]
+        if not self.transform:
+            return self.by_idx[idx]
+        else:
+            return self.transform(self.by_idx[idx])
+
+    def __len__(self):
+        return len(self.by_idx)
 
 
 class ToTensor(object):
@@ -85,8 +95,9 @@ class ToTensor(object):
         hcqt = sample['hcqt']
         f0 = sample['f0']
 
-        return {'hcqt': torch.from_numpy(hcqt[np.newaxis, ...]),
-                'f0': torch.from_numpy(f0[np.newaxis, ...])}
+        return {'hcqt': torch.from_numpy(hcqt).to(dtype=torch.double),
+                # add harmonic channel for f0
+                'f0': torch.from_numpy(f0[np.newaxis, ...]).to(dtype=torch.double)}
 
 
 if __name__ == '__main__':

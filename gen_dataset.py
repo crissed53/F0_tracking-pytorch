@@ -9,6 +9,10 @@ import tqdm
 
 from utils.feature_utils import gen_hcqt, CQTconfig, hz_to_cqt_bin
 
+# from threading import Thread
+# from queue import Queue
+from multiprocessing import Process, Queue
+
 
 def save_data(hcqt: np.ndarray, f0_arr: np.ndarray,
               file_meta: dict, save_root: str) -> dict:
@@ -62,7 +66,74 @@ def create_dataset(root: str, metadata: dict,
         json.dump(meta_data, f, indent=4)
 
 
-def check_if_valid_frames(hcqt: np.ndarray, f0_oh: np.ndarray, filename: str) ->int:
+class DatasetCreator(Process):
+    def __init__(self, in_q: Queue, out_q: Queue, prog_bar: tqdm.tqdm):
+        super().__init__()
+        self.in_q = in_q
+        self.out_q = out_q
+        self.prog_bar = prog_bar
+
+    def run(self):
+        while True:
+            param = self.in_q.get()
+            if param is None:
+                return
+            root, file_meta, filename,  h_factor, cqt_config = param
+
+            hcqt = wav_to_hcqt(root, file_meta, h_factor, cqt_config)
+            f0_oh = csv_to_arr_f0(root, file_meta, cqt_config)
+
+            frame_diff = check_if_valid_frames(hcqt, f0_oh, filename)
+            if frame_diff > 0:
+                hcqt = hcqt[:, :, :-frame_diff]
+            elif frame_diff < 0:
+                f0_oh = f0_oh[:, :frame_diff]
+            save_meta = save_data(hcqt, f0_oh, file_meta, save_root)
+
+            self.out_q.put((filename, save_meta))
+
+            self.prog_bar.update()
+
+
+def create_dataset_mt(root: str, metadata: dict,
+                      h_factor: Tuple[float] = (0.5, 1, 2, 3),
+                      cqt_config: CQTconfig = CQTconfig(),
+                      save_root: str = './dataset/features',
+                      num_workers: int = 32) -> None:
+    in_q = Queue()
+    out_q = Queue()
+
+    prog_bar = tqdm.tqdm(
+        total=len(metadata), desc='creating dataset', position=0)
+
+    for idx, (filename, file_meta) in enumerate(metadata.items()):
+        in_q.put_nowait((root, file_meta, filename, h_factor, cqt_config))
+
+    for _ in range(num_workers):
+        in_q.put(None)
+
+    workers = [DatasetCreator(in_q, out_q, prog_bar) for _ in range(num_workers)]
+
+    for w in workers:
+        w.start()
+
+    while not in_q.empty():
+        continue
+
+    for w in workers:
+        w.join()
+
+    meta_data = {'dataset': {}, 'cqt_config': cqt_config.to_dict()}
+    while not out_q.empty():
+        filename, save_meta = out_q.get()
+        meta_data['dataset'][filename] = save_meta
+
+    dataset_metadata_path = os.path.join(save_root, 'metadata.json')
+    with open(dataset_metadata_path, 'w') as f:
+        json.dump(meta_data, f, indent=4)
+
+
+def check_if_valid_frames(hcqt: np.ndarray, f0_oh: np.ndarray, filename: str) -> int:
     """
     Check if numbers of frames in generated hcqt and one-hot vector representation
     of f0
@@ -169,4 +240,4 @@ if __name__ == '__main__':
     with open(meta_file) as f:
         metadata = json.load(f)
 
-    create_dataset(root, metadata, save_root=save_root)
+    create_dataset_mt(root, metadata, save_root=save_root)
