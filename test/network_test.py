@@ -1,5 +1,5 @@
 import unittest
-from network import SalomonF0Tracker
+from model.model import SalomonF0Tracker
 import torch
 
 
