@@ -129,8 +129,8 @@ def get_sine_wave_from_f0(f0: np.ndarray, cqt_config: CQTconfig = CQTconfig()):
     return np.concatenate(stack)
 
 
-def audio_to_cqt_and_f0(audio_path: str, start_t: int, end_t: int,
-                        net: nn.Module, frame_hop: int = 25) -> dict:
+def audio_to_cqt_and_f0(audio_path: str, start_t: int, end_t: int, net: nn.Module,
+                        frame_hop: int = 25, thres: float = 0.25) -> dict:
     frame_len_feature = F0TrackingDataset.FEATURE_LEN
 
     num_overlap = frame_len_feature // frame_hop
@@ -152,7 +152,7 @@ def audio_to_cqt_and_f0(audio_path: str, start_t: int, end_t: int,
         f_hat_total[:, start_frame: end_frame] += f0_hat[0][0]
         prog_bar.update()
 
-    f0 = (f_hat_total > 0.25 * num_overlap).astype(int)
+    f0 = (f_hat_total > thres * num_overlap).astype(int)
     cqt = hcqt[1, :, :]
 
     return {'f0': f0, 'cqt': cqt}
@@ -160,16 +160,18 @@ def audio_to_cqt_and_f0(audio_path: str, start_t: int, end_t: int,
 
 def f0_tracking_demo(audio_path: str, start_t: int, end_t: int,
                      frame_hop: int = 25, interactive: bool = True,
-                     cqt_config: CQTconfig = CQTconfig()):
+                     cqt_config: CQTconfig = CQTconfig(),
+                     thres: float = 0.25, window_len: int = 11):
 
     afile_info = AudioFileInfo(audio_path, start_t, end_t)
     net = load_model()
 
-    result = audio_to_cqt_and_f0(audio_path, start_t, end_t, net, frame_hop)
+    result = audio_to_cqt_and_f0(
+        audio_path, start_t, end_t, net, frame_hop, thres)
     f0, cqt = result['f0'], result['cqt']
 
     midis = f0_contour_to_midi_contour(f0)
-    midis_smoothed = smooth_f0_midi(midis)
+    midis_smoothed = smooth_f0_midi(midis, window_len)
 
     if interactive:
         # visualize f0 and cqt
