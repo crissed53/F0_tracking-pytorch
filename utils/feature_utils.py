@@ -31,13 +31,10 @@ class AudioFileInfo:
     end_t: float
 
 
-def gen_hcqt(y: np.ndarray, h_factor: Tuple[float] = (0.5, 1, 2, 3),
+def gen_hcqt(y: np.ndarray, h_factor: Tuple[float] = (0.5, 1, 2, 3, 4, 5),
              cqt_config: CQTconfig = CQTconfig()) -> np.ndarray:
     """
-    Computes Harmonic CQT. The implementation does not directly follow the paper
-    as higher up the harmonic channel, upper bound of frequency gets too large
-    for given configuration. For this, h_factor = [0.5, 1, 2, 3] is recommended
-    instead of [0.5, 1, 2, 3, 4, 5]
+    Computes Harmonic CQT.
     Args:
         y: mono-audio array
         h_factor: harmonic factor which is used to compute HCQT
@@ -67,15 +64,16 @@ def gen_hcqt(y: np.ndarray, h_factor: Tuple[float] = (0.5, 1, 2, 3),
     return np.stack(stack, axis=0)
 
 
-def cqt_bin_to_hz(bin: int, fmin_note: str, bins_per_octave: int):
+def cqt_bin_to_hz(bin: int, fmin_note: str, bins_per_octave: int) -> float:
     """
     Convert cqt bin into frequency in hz
     Args:
-        bin:
-        fmin_note:
-        bins_per_octave:
+        bin: frequency bin number
+        fmin_note: mininum frequency used to generate CQT in note scale
+        bins_per_octave: bins per octave used to generate CQT
 
     Returns:
+        frequency corresponding to the bin in Hz
 
     """
     bins_per_semitone = bins_per_octave / 12
@@ -84,16 +82,18 @@ def cqt_bin_to_hz(bin: int, fmin_note: str, bins_per_octave: int):
     return librosa.midi_to_hz(midi_number)
 
 
-def cqt_bin_to_midi_hz(bin: int, fmin_note: str, bins_per_octave: int):
+def cqt_bin_to_midi_hz(bin: int, fmin_note: str, bins_per_octave: int) -> float:
     """
-    Convert cqt bin into frequency in hz corresponding to the nearest integer
+    Convert cqt bin into frequency in Hz corresponding to the nearest integer
     midi number
     Args:
-        bin:
-        fmin_note:
-        bins_per_octave:
+        bin: frequency bin number
+        fmin_note: minimum frequency used to generate CQT in note scale
+        bins_per_octave: bins per octave used to generate CQT
 
     Returns:
+        frequency to the nearest integer midi number, corresponding to the bin
+        in Hz
 
     """
     midi_num = cqt_bin_to_int_midi(bin, fmin_note, bins_per_octave)
@@ -104,11 +104,12 @@ def cqt_bin_to_int_midi(bin: int, fmin_note: str, bins_per_octave: int) -> int:
     """
     Convert cqt bin into midi number rounded to the nearest integer
     Args:
-        bin:
-        fmin_note:
-        bins_per_octave:
+        bin: frequency bin number
+        fmin_note: minimum frequency used to generate CQT in note scale
+        bins_per_octave: bins per octave used to generate CQT
 
     Returns:
+        midi number corresponding to the bin rounded to the nearest integer
 
     """
     bins_per_semitone = bins_per_octave / 12
@@ -124,6 +125,7 @@ def f0_contour_to_midi_contour(f0_contour: np.ndarray) -> np.ndarray:
         f0_contour: contour of f0, in array
 
     Returns:
+        Melody contour array in midi number (rounded to the nearest integer)
 
     """
     cqt_config = CQTconfig()
@@ -228,7 +230,19 @@ def visualize_f0_and_cqt(
     plt.show()
 
 
-def artificial_piano(f, sr, length, phis=None):
+def artificial_inst(f: float, sr: float, length: int, phis: dict = None):
+    """
+    Create artificial instrumental sound
+    Args:
+        f: fundamental frequency of the instrument
+        sr: sampling rate
+        length: sample length of the instrumental sound
+        phis: phase information for all the harmonics in the artificial
+            instrument. key: value -> harmonic number:
+
+    Returns:
+
+    """
     H = (1, 3, 5)
     if phis is None:
         phis = {h: -np.pi / 2 for h in H}
@@ -249,7 +263,18 @@ def artificial_piano(f, sr, length, phis=None):
     return piano_sound, phis
 
 
-def smooth_f0_midi(f0_midi, window_len: int = 11):
+def smooth_f0_midi(f0_midi: np.ndarray, window_len: int = 11,
+                   window_thres: float = 0.3) -> np.ndarray:
+    """
+    Smooth f0 contour, in midi number
+    Args:
+        f0_midi: f0 contour in midi number
+        window_len: window length used for smoothing
+        window_thres:
+
+    Returns:
+
+    """
     padded = np.pad(f0_midi, (window_len // 2, window_len // 2), 'constant',
                     constant_values=(-1, -1))
     smoothed = np.zeros(f0_midi.shape)
@@ -257,9 +282,15 @@ def smooth_f0_midi(f0_midi, window_len: int = 11):
         windowed_arr = padded[i: i + window_len]
         most_comm_val = collections.Counter(windowed_arr).most_common()[0][0]
         most_comm_count = collections.Counter(windowed_arr).most_common()[0][1]
-        if most_comm_val == -1 and most_comm_count > window_len * 0.3:
+        if most_comm_val == -1 and most_comm_count > window_len * window_thres:
+            # if -1 is the element with the most count in the window, and if
+            # the number exceeds window_thres of the window length, the
+            # corresponding entry in the output array is set to -1
             smoothed[i] = most_comm_val
         else:
+            # else, the corresponding entry in the output array is set to the
+            # mean of the values in the window, neglec
+
             smoothed[i] = np.mean(windowed_arr[windowed_arr != -1])
 
     return smoothed
@@ -281,7 +312,7 @@ def midi_to_pcm(midi_smoothed: np.ndarray,
         else:
             f = librosa.midi_to_hz(midi)
 
-            piano_sound, phi = artificial_piano(
+            piano_sound, phi = artificial_inst(
                 f, cqt_config.sr, cqt_config.hop_length, phi)
 
             stack.append(piano_sound)

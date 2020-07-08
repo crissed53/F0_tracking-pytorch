@@ -95,18 +95,31 @@ class DatasetCreator(Process):
             self.prog_bar.update()
 
 
-def create_dataset_mt(root: str, metadata: dict,
-                      h_factor: Tuple[float] = (0.5, 1, 2, 3),
-                      cqt_config: CQTconfig = CQTconfig(),
-                      save_root: str = './dataset/features',
-                      num_workers: int = 32) -> None:
+def create_feature_dataset_mp(root: str, meta_filename: dict,
+                              h_factor: Tuple[float] = (0.5, 1, 2, 3),
+                              cqt_config: CQTconfig = CQTconfig(),
+                              save_root: str = './dataset/features',
+                              num_workers: int = 32) -> None:
+    """
+    Create dataset with multiprocessing
+    Args:
+        root: root directory in which MelodyDB is saved
+        meta_filename: filename in which metadata of the dataset is saved
+        h_factor: harmonic factors used to calculate hcqt
+        cqt_config: config used to generate CQT
+        save_root: directory in which the generated features is to be saved
+        num_workers: number of processes for multiprocessing
+
+    Returns:
+
+    """
     in_q = Queue()
     out_q = Queue()
 
     prog_bar = tqdm.tqdm(
-        total=len(metadata), desc='creating dataset', position=0)
+        total=len(meta_filename), desc='creating dataset', position=0)
 
-    for idx, (filename, file_meta) in enumerate(metadata.items()):
+    for idx, (filename, file_meta) in enumerate(meta_filename.items()):
         in_q.put_nowait((root, file_meta, filename, h_factor, cqt_config))
 
     for _ in range(num_workers):
@@ -133,22 +146,23 @@ def create_dataset_mt(root: str, metadata: dict,
         json.dump(meta_data, f, indent=4)
 
 
-def check_if_valid_frames(hcqt: np.ndarray, f0_oh: np.ndarray, filename: str) -> int:
+def check_if_valid_frames(hcqt: np.ndarray, f0_arr: np.ndarray, filename: str) -> int:
     """
-    Check if numbers of frames in generated hcqt and one-hot vector representation
-    of f0
+    Check if numbers of frames in generated hcqt and one-hot vector
+    representation of f0
     Args:
-        hcqt:
-        f0_oh:
-        filename:
+        hcqt: hcqt array
+        f0_arr: f0 array
+        filename: filename in which hcqt is being extracted
 
     Returns:
+        difference of frames between the hcqt and the f0 array
 
     """
     # from (h, f, t)
     hcqt_t_frame = hcqt.shape[2]
     # from (f0, t)
-    f0_t_frame = f0_oh.shape[1]
+    f0_t_frame = f0_arr.shape[1]
 
     frame_diff = abs(hcqt_t_frame - f0_t_frame)
 
@@ -166,6 +180,7 @@ def csv_to_arr_f0(root: str, file_meta: dict,
     Args:
         root: root directory of dataset
         file_meta: metadata of a single audio data
+        cqt_config: config used to generate CQT
 
     Returns:
         f0 info in np.ndarray
@@ -177,7 +192,8 @@ def csv_to_arr_f0(root: str, file_meta: dict,
         reader = csv.reader(f, delimiter=',')
         reader = list(reader)
     _, f0_list = list(zip(*reader))
-    # Downsample by factor of 2: time resolution of hcqt is 11.6 ms while
+
+    # Downsample by factor of 2; time resolution of hcqt is 11.6 ms while
     # time resolution of f0 data is half of that, 5.8 ms.
     f0_list = [float(f0) for f0 in f0_list][::2]
     # initialize one-hot vector representation of f0
@@ -240,4 +256,4 @@ if __name__ == '__main__':
     with open(meta_file) as f:
         metadata = json.load(f)
 
-    create_dataset_mt(root, metadata, save_root=save_root)
+    create_feature_dataset_mp(root, metadata, save_root=save_root)
