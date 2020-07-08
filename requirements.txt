@@ -1,0 +1,9 @@
+jupyter==1.0.0
+librosa==0.7.2
+matplotlib==3.2.2
+numpy==1.19.0
+pytorch-lightning==0.8.4
+tensorboard==2.2.2
+torch==1.5.1
+torchvision==0.6.1
+tqdm==4.47.0
